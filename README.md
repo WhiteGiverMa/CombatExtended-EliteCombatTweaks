@@ -5,6 +5,7 @@ Combat Extended 爽局 / 少人精英局数值补丁。
 ## 功能边界
 
 - **瞄准时间**：`AimingDelayFactor` 的后处理曲线最低从 50% 放到 **1%**。
+- **远程冷却**：操作能力、移动能力、呼吸能力提供额外远程冷却乘区，最多由本 mod 减少 75%，最终最低为基础冷却的 1%。
 - **武器掌握 / weapon handling**：移除 CE `ShootingAccuracyPawn` 的 XML 平顶，Harmony 替换 `Verb_LaunchProjectileCE.ShootingAccuracy` 的 4.5 硬截断为递减曲线。
 - **瞄准精度 / aiming accuracy**：移除 CE `AimingAccuracy` 的 XML 平顶，Harmony 替换 1.5 硬截断；超额精度继续降低 spread/sway，但会保护 CE 的 lead/range/visibility 误差不变成负数。
 
@@ -24,6 +25,49 @@ Combat Extended 爽局 / 少人精英局数值补丁。
 ```
 
 也就是最低瞄准时间倍率从 CE 的 `50%` 降到 `1%`。
+
+### 远程冷却
+
+原版 `RangedCooldownFactor` 和 `AimingDelayFactor` 的 `1%` 是 `StatDef.minValue`，不是最终 `Verb` 层统一兜底。`VerbProperties.AdjustedCooldown()` 只是把武器冷却、`RangedCooldownFactor` 等相乘后转为秒数；所以本 mod 在最终 ranged cooldown 秒数入口增加一个额外乘区，并按基础冷却的 `1%` 收底。
+
+```text
+M = Manipulation / 操作能力
+V = Moving / 移动能力
+B = Breathing / 呼吸能力
+
+score =
+  0.55 * max(0, M - 1)
++ 0.30 * max(0, V - 1)
++ 0.15 * max(0, B - 1)
+
+eliteMultiplier = 1 - 0.75 * (1 - exp(-score / 0.65))
+
+finalCooldown = max(baseCooldown * 0.01, currentCooldown * eliteMultiplier)
+```
+
+`eliteMultiplier` 渐近 `0.25`，表示**本 mod 自己最多减少 75%**；其他机制（如 `RangedCooldownFactor`）仍可以继续把剩余冷却压到基础冷却的 `1%`。
+
+预期值：
+
+| 操作 / 移动 / 呼吸 | 冷却乘区 | 本 mod 减少 |
+|---:|---:|---:|
+| 100% / 100% / 100% | 100% | 0% |
+| 125% / 125% / 125% | 76% | 24% |
+| 150% / 150% / 150% | 60% | 40% |
+| 200% / 200% / 200% | 41% | 59% |
+| 250% / 250% / 250% | 32% | 68% |
+| 300% / 300% / 300% | 28% | 72% |
+| 极限趋近∞ | 25% | 75% |
+
+单项强化大致效果：
+
+| 操作 / 移动 / 呼吸 | 冷却乘区 |
+|---:|---:|
+| 200% / 100% / 100% | 57% |
+| 100% / 200% / 100% | 72% |
+| 100% / 100% / 200% | 85% |
+| 180% / 150% / 125% | 54% |
+| 250% / 200% / 150% | 37% |
 
 ### 武器掌握 / weapon handling
 
@@ -76,6 +120,7 @@ swayDegrees   *= 1 / sqrt(1 + max(0, effective - 1.5) * 0.75)
 - raw stat 是 `NaN`：回退到安全默认值。
 - raw stat 是 `+Infinity`：转为 `float.MaxValue` 后走递减曲线。
 - raw stat 是 `-Infinity`：按极低值处理，最终有效值不低于 0。
+- 远程冷却当前值、基础值或能力值异常：转为非负有限值；最终冷却不低于基础冷却的 1%。
 - `accuracyFactor` / `visibilityShift` 是负数、`NaN` 或 `-Infinity`：回 0。
 - `accuracyFactor` / `visibilityShift` 是 `+Infinity`：转为 `float.MaxValue`，不产生 `NaN`。
 

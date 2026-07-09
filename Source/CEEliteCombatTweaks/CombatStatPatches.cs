@@ -61,6 +61,16 @@ public static class CombatStatPatches
         }
     }
 
+    [HarmonyPatch(typeof(VerbProperties), nameof(VerbProperties.AdjustedCooldown), typeof(Verb), typeof(Pawn))]
+    public static class Patch_AdjustedCooldown
+    {
+        [HarmonyPriority(Priority.Low)]
+        static void Postfix(Verb ownerVerb, Pawn attacker, ref float __result)
+        {
+            __result = CombatStatCurves.ApplyEliteRangedCooldown(__result, ownerVerb, attacker);
+        }
+    }
+
     private static void ApplyExtraAimingAccuracy(ShiftVecReport report)
     {
         if (report == null)

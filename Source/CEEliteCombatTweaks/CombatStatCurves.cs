@@ -10,6 +10,8 @@ public static class CombatStatCurves
     private const float HandlingSoftCap = 4.5f;
     private const float HandlingRecoilSafeCeiling = 4.99f;
     private const float AimingSoftCap = 1.5f;
+    private const float EliteCooldownMaxReduction = 0.75f;
+    private const float EliteCooldownScoreScale = 0.65f;
 
     public static float RawWeaponHandling(Verb_LaunchProjectileCE verb)
     {
@@ -61,6 +63,31 @@ public static class CombatStatCurves
         return 1f / Mathf.Sqrt(1f + excess * 0.75f);
     }
 
+    public static float ApplyEliteRangedCooldown(float currentCooldown, Verb ownerVerb, Pawn attacker)
+    {
+        currentCooldown = NonNegativeFiniteOrZero(currentCooldown);
+        if (ownerVerb == null || ownerVerb.verbProps == null || ownerVerb.verbProps.IsMeleeAttack || ownerVerb is not Verb_LaunchProjectileCE)
+            return currentCooldown;
+
+        float multiplier = EliteCooldownMultiplier(attacker);
+        float minimumCooldown = BaseRangedCooldown(ownerVerb) * 0.01f;
+        return Mathf.Max(minimumCooldown, currentCooldown * multiplier);
+    }
+
+    public static float EliteCooldownMultiplier(Pawn pawn)
+    {
+        if (pawn?.health?.capacities == null)
+            return 1f;
+
+        float score =
+            CapacityExcess(pawn, PawnCapacityDefOf.Manipulation) * 0.55f
+            + CapacityExcess(pawn, PawnCapacityDefOf.Moving) * 0.30f
+            + CapacityExcess(pawn, PawnCapacityDefOf.Breathing) * 0.15f;
+        score = NonNegativeFiniteOrZero(score);
+
+        return 1f - EliteCooldownMaxReduction * (1f - Mathf.Exp(-score / EliteCooldownScoreScale));
+    }
+
     public static float NonNegativeFiniteOrZero(float value)
     {
         if (float.IsNaN(value) || float.IsNegativeInfinity(value) || value < 0f)
@@ -81,5 +108,21 @@ public static class CombatStatCurves
             return -float.MaxValue;
 
         return value;
+    }
+
+    private static float CapacityExcess(Pawn pawn, PawnCapacityDef capacity)
+    {
+        return Mathf.Max(0f, FiniteOr(pawn.health.capacities.GetLevel(capacity), 1f) - 1f);
+    }
+
+    private static float BaseRangedCooldown(Verb ownerVerb)
+    {
+        if (ownerVerb.tool != null)
+            return NonNegativeFiniteOrZero(ownerVerb.tool.AdjustedCooldown(ownerVerb.EquipmentSource));
+
+        if (ownerVerb.EquipmentSource != null)
+            return NonNegativeFiniteOrZero(ownerVerb.EquipmentSource.GetStatValue(StatDefOf.RangedWeapon_Cooldown));
+
+        return NonNegativeFiniteOrZero(ownerVerb.verbProps.defaultCooldownTime);
     }
 }
