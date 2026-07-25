@@ -6,7 +6,7 @@
 		<li>1.6</li>
 	</supportedVersions>
 	<packageId>WhiteGiverMa.CEEliteCombatTweaks</packageId>
-	<description>Local Combat Extended tuning for high-power / small-elite colonies. Lowers the minimum aiming delay factor to 1% and replaces CE's hard caps on weapon handling and aiming accuracy with safe diminishing-return curves.
+	<description>Local Combat Extended tuning for high-power / small-elite colonies. Lowers the minimum aiming delay factor to 1%, applies capacity-based ranged cooldown reductions, and enforces a weapon-cycle cooldown floor.
 
 Requires Combat Extended.</description>
 	<modDependencies>

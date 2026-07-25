@@ -17,49 +17,21 @@
 		</value>
 	</Operation>
 
-	<Operation Class="PatchOperationReplace">
-		<xpath>Defs/StatDef[defName="ShootingAccuracyPawn"]/description</xpath>
-		<value>
-			<description>How well a shooter can hold a gun steady when aiming and compensate for recoil.
-
-CE Elite Combat Tweaks removes Combat Extended's flat 450% cap. Values above the old cap continue to help through a diminishing-return curve, with the final combat math kept safe for CE recoil and sway formulas.</description>
-		</value>
-	</Operation>
-
 	<Operation Class="PatchOperationConditional">
-		<xpath>Defs/StatDef[defName="ShootingAccuracyPawn"]/maxValue</xpath>
-		<match Class="PatchOperationRemove">
-			<xpath>Defs/StatDef[defName="ShootingAccuracyPawn"]/maxValue</xpath>
+		<xpath>Defs/StatDef[defName="RangedCooldownFactor"]/parts</xpath>
+		<match Class="PatchOperationAdd">
+			<xpath>Defs/StatDef[defName="RangedCooldownFactor"]/parts</xpath>
+			<value>
+				<li Class="CEEliteCombatTweaks.StatPart_EliteRangedCooldownOffset" />
+			</value>
 		</match>
-	</Operation>
-
-	<Operation Class="PatchOperationConditional">
-		<xpath>Defs/StatDef[defName="ShootingAccuracyPawn"]/postProcessCurve</xpath>
-		<match Class="PatchOperationRemove">
-			<xpath>Defs/StatDef[defName="ShootingAccuracyPawn"]/postProcessCurve</xpath>
-		</match>
-	</Operation>
-
-	<Operation Class="PatchOperationReplace">
-		<xpath>Defs/StatDef[defName="AimingAccuracy"]/description</xpath>
-		<value>
-			<description>How well a shooter can lead moving targets and estimate range in combination with the weapon's aiming efficiency.
-
-CE Elite Combat Tweaks removes Combat Extended's flat 150% cap. Extra aiming accuracy has diminishing returns: lead/range/visibility error cannot go below zero, and additional accuracy further compresses residual spread and sway.</description>
-		</value>
-	</Operation>
-
-	<Operation Class="PatchOperationConditional">
-		<xpath>Defs/StatDef[defName="AimingAccuracy"]/maxValue</xpath>
-		<match Class="PatchOperationRemove">
-			<xpath>Defs/StatDef[defName="AimingAccuracy"]/maxValue</xpath>
-		</match>
-	</Operation>
-
-	<Operation Class="PatchOperationConditional">
-		<xpath>Defs/StatDef[defName="AimingAccuracy"]/postProcessCurve</xpath>
-		<match Class="PatchOperationRemove">
-			<xpath>Defs/StatDef[defName="AimingAccuracy"]/postProcessCurve</xpath>
-		</match>
+		<nomatch Class="PatchOperationAdd">
+			<xpath>Defs/StatDef[defName="RangedCooldownFactor"]</xpath>
+			<value>
+				<parts>
+					<li Class="CEEliteCombatTweaks.StatPart_EliteRangedCooldownOffset" />
+				</parts>
+			</value>
+		</nomatch>
 	</Operation>
 </Patch>

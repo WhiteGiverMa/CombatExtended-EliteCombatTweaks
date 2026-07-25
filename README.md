@@ -2,17 +2,11 @@
 
 Combat Extended 爽局 / 少人精英局数值补丁。
 
-## 功能边界
+## 功能
 
 - **瞄准时间**：`AimingDelayFactor` 的后处理曲线最低从 50% 放到 **1%**。
-- **远程冷却**：操作能力、移动能力、呼吸能力提供额外远程冷却乘区，最多由本 mod 减少 75%，最终最低为基础冷却的 1%。
-- **武器掌握 / weapon handling**：移除 CE `ShootingAccuracyPawn` 的 XML 平顶，Harmony 替换 `Verb_LaunchProjectileCE.ShootingAccuracy` 的 4.5 硬截断为递减曲线。
-- **瞄准精度 / aiming accuracy**：移除 CE `AimingAccuracy` 的 XML 平顶，Harmony 替换 1.5 硬截断；超额精度继续降低 spread/sway，但会保护 CE 的 lead/range/visibility 误差不变成负数。
-
-## 不包含
-
-- 不包含过穿透玩法：见 `CEOverpenetration`。
-- 不包含破墙 AI/LoS 兼容修复：见 `CEBreachingFix`。
+- **远程冷却**：操作能力、移动能力、呼吸能力给 `RangedCooldownFactor` 提供额外 offset，最多由本 mod 提供 `-75%`，角色面板会展开完整公式，并受原版 1% 最低值保护。
+- **枪机循环下限**：最终远程冷却不会低于 `ticksBetweenBurstShots` 对应的射击间隔，避免前一段 burst 的最后一发到后一段 burst 的第一发快过枪械循环射速。
 
 ## 曲线
 
@@ -28,7 +22,7 @@ Combat Extended 爽局 / 少人精英局数值补丁。
 
 ### 远程冷却
 
-原版 `RangedCooldownFactor` 和 `AimingDelayFactor` 的 `1%` 是 `StatDef.minValue`，不是最终 `Verb` 层统一兜底。`VerbProperties.AdjustedCooldown()` 只是把武器冷却、`RangedCooldownFactor` 等相乘后转为秒数；所以本 mod 在最终 ranged cooldown 秒数入口增加一个额外乘区，并按基础冷却的 `1%` 收底。
+原版 `RangedCooldownFactor` 和 `AimingDelayFactor` 的 `1%` 是 `StatDef.minValue`，不是最终 `Verb` 层统一兜底。`VerbProperties.AdjustedCooldown()` 只是把武器冷却、`RangedCooldownFactor` 等相乘后转为秒数；所以本 mod 不再在最终秒数上 postfix，也不在 `StatPart.TransformValue` 里做最终乘算，而是在 `StatWorker.GetValueUnfinalized()` 的 base value 后注入一个 `-n%` offset。这样它位于 RimWorld 原本的“先加减，后乘除”管线里，后续 vanilla factors 仍照常生效。
 
 ```text
 M = Manipulation / 操作能力
@@ -40,96 +34,57 @@ score =
 + 0.30 * max(0, V - 1)
 + 0.15 * max(0, B - 1)
 
-eliteMultiplier = 1 - 0.75 * (1 - exp(-score / 0.65))
+offsetReduction = 0.75 * (1 - exp(-score / 0.65))
 
-finalCooldown = max(baseCooldown * 0.01, currentCooldown * eliteMultiplier)
+unfinalizedValue = baseValue - offsetReduction + otherOffsets
+finalRangedCooldownFactor = clamp(unfinalizedValue * factors, 0.01, maxValue)
 ```
 
-`eliteMultiplier` 渐近 `0.25`，表示**本 mod 自己最多减少 75%**；其他机制（如 `RangedCooldownFactor`）仍可以继续把剩余冷却压到基础冷却的 `1%`。
+`offsetReduction` 渐近 `0.75`，表示**本 mod 自己最多提供 -75% offset**；最终由原版 `StatDef.minValue = 0.01` 收到底。
+
+### 枪机循环下限
+
+CE 的 burst 内射击间隔由 `ticksBetweenBurstShots` 控制，原版/CE 也用它展示 burst fire rate（rpm）。本 mod 额外保证 burst 与 burst 之间的最终冷却也不低于这个间隔：
+
+```text
+cyclicInterval = ticksBetweenBurstShots / 60
+finalCooldown = max(adjustedCooldown, cyclicInterval)
+```
+
+这样切到半自动时，连续两次扣扳机也不会比同一把枪的连发循环更快。CE 的 GunPatcher 中全自动模板会显式标 `ticksBetweenBurstShots`（如 AssaultRifle 约 5 ticks）；半自动模板未标时使用 vanilla 默认 15 ticks，即约 0.25s。
 
 预期值：
 
-| 操作 / 移动 / 呼吸 | 冷却乘区 | 本 mod 减少 |
+| 操作 / 移动 / 呼吸 | offset | 本 mod 减少 |
 |---:|---:|---:|
-| 100% / 100% / 100% | 100% | 0% |
-| 125% / 125% / 125% | 76% | 24% |
-| 150% / 150% / 150% | 60% | 40% |
-| 200% / 200% / 200% | 41% | 59% |
-| 250% / 250% / 250% | 32% | 68% |
-| 300% / 300% / 300% | 28% | 72% |
-| 极限趋近∞ | 25% | 75% |
+| 100% / 100% / 100% | -0% | 0% |
+| 125% / 125% / 125% | -24% | 24% |
+| 150% / 150% / 150% | -40% | 40% |
+| 200% / 200% / 200% | -59% | 59% |
+| 250% / 250% / 250% | -68% | 68% |
+| 300% / 300% / 300% | -72% | 72% |
+| 极限趋近∞ | -75% | 75% |
 
 单项强化大致效果：
 
-| 操作 / 移动 / 呼吸 | 冷却乘区 |
+| 操作 / 移动 / 呼吸 | offset |
 |---:|---:|
-| 200% / 100% / 100% | 57% |
-| 100% / 200% / 100% | 72% |
-| 100% / 100% / 200% | 85% |
-| 180% / 150% / 125% | 54% |
-| 250% / 200% / 150% | 37% |
-
-### 武器掌握 / weapon handling
-
-CE 原逻辑把 `ShootingAccuracy` 硬钳到 `4.5`。本 mod 读取未平顶的 raw stat，然后使用：
-
-```text
-raw <= 4.5:
-  effective = max(0, raw)
-
-raw > 4.5:
-  effective = 4.5 + 0.49 * (1 - exp(-(raw - 4.5) / 4))
-```
-
-所以它不再突然停在 `450%`，但会渐近 `4.99`。这是为了保护 CE 原后坐力公式：
-
-```text
-recoilMagnitude = Pow(5 - ShootingAccuracy, shotCountFactor)
-```
-
-`ShootingAccuracy < 5` 可以避免负底数、`NaN` 后坐力和弹道污染。
-
-### 瞄准精度 / aiming accuracy
-
-CE 原逻辑把 `AimingAccuracy` 硬钳到 `1.5`。本 mod 读取未平顶的 raw stat，然后使用：
-
-```text
-raw <= 1.5:
-  effective = max(0, raw)
-
-raw > 1.5:
-  effective = 1.5 + ln(1 + raw - 1.5) * 0.25
-```
-
-CE 的 lead/range/visibility 误差公式仍以 `1.5`/`2.0` 为零点；超额精度不会让误差变成负数：
-
-```text
-accuracyFactor = max(0, finite((1.5 - aimingAccuracy) / sightsEfficiency))
-visibilityShift = max(0, finite(environmentShift * distanceFactor * (2 - aimingAccuracy)))
-```
-
-超额精度继续压低散布和摇摆：
-
-```text
-spreadDegrees *= 1 / sqrt(1 + max(0, effective - 1.5) * 0.75)
-swayDegrees   *= 1 / sqrt(1 + max(0, effective - 1.5) * 0.75)
-```
+| 200% / 100% / 100% | -43% |
+| 100% / 200% / 100% | -28% |
+| 100% / 100% / 200% | -15% |
+| 180% / 150% / 125% | -46% |
+| 250% / 200% / 150% | -63% |
 
 ### 极端值保护
 
-- raw stat 是 `NaN`：回退到安全默认值。
-- raw stat 是 `+Infinity`：转为 `float.MaxValue` 后走递减曲线。
-- raw stat 是 `-Infinity`：按极低值处理，最终有效值不低于 0。
-- 远程冷却当前值、基础值或能力值异常：转为非负有限值；最终冷却不低于基础冷却的 1%。
-- `accuracyFactor` / `visibilityShift` 是负数、`NaN` 或 `-Infinity`：回 0。
-- `accuracyFactor` / `visibilityShift` 是 `+Infinity`：转为 `float.MaxValue`，不产生 `NaN`。
+- 远程冷却 stat 值或能力值异常：转为非负有限值；最终 `RangedCooldownFactor` 不低于原版 1% 最低值。
 
 ## 启动自检
 
 加载完成后会检查 XML patch 是否生效：
 
 - 生效：打印 `[CE Elite Combat Tweaks] Stat XML patches active...`
-- 失败：打印 `Log.Warning`，包含当前 `AimingDelayFactor@0.01`、`ShootingAccuracyPawn.maxValue`、`AimingAccuracy.maxValue`。
+- 失败：打印 `Log.Warning`，包含当前 `AimingDelayFactor@0.01`、`RangedCooldownFactor.elitePart`。
 
 ## 构建
 
